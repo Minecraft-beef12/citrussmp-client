@@ -1,0 +1,53 @@
+name: Build CitrusSMP Client
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack project
+        run: |
+          mkdir proj
+          unzip -q CitrusSMP-Client-source.zip -d proj
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.5.1
+      - name: Build mod
+        working-directory: proj
+        run: |
+          set +e
+          gradle build --stacktrace > ../build.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            {
+              echo "## ERROR - screenshot this"
+              echo '```'
+              grep -v "^\s*at " ../build.log | grep -v "^\s*\.\.\. " | grep -n -iE -B2 -A8 "went wrong|error:|could not|not found|unresolved|cannot find|exception" | head -70
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $code
+      - name: Collect files
+        run: |
+          mkdir out
+          cp proj/build/libs/citrussmp-client-*[0-9].jar out/CitrusSMP-Client.jar
+          cp proj/CitrusSMP-Resources.zip out/
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ github.run_number }}" out/* \
+            --title "CitrusSMP Client v${{ github.run_number }}" \
+            --notes "Download CitrusSMP-Client.jar and CitrusSMP-Resources.zip. Install steps are in the README."
